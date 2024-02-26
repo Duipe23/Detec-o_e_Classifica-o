@@ -3,7 +3,7 @@ Rede neural para a detecção e classificação de faces humanas.
 
 Como dataset utilizei as fotos da minha família e para cada membro foi configurado a rede para que detectasse e classificasse cada um dos membros da família. 
 
-Não teve um resultado 100% por conta da quantidade de fotos do dataset.
+Não teve um resultado 100% por conta da quantidade de fotos do dataset, porém o resultado esta bem acima do esperado, levando a consideração a quantidade de classes no código.
 
 Resultado:
 
