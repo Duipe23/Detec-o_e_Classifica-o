@@ -1,0 +1,140 @@
+import tensorflow as tf
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2, preprocess_input, decode_predictions
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import matplotlib.pyplot as plt
+import cv2
+import numpy as np
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+from tensorflow.keras.models import load_model
+from mtcnn.mtcnn import MTCNN
+from google.colab import files
+from io import BytesIO
+import IPython.display as display
+from PIL import Image
+import matplotlib.pyplot as plt
+
+
+# Defina o número de classes
+num_classes = 8
+
+# Carregue o modelo MobileNetV2 pré-treinado
+base_model = MobileNetV2(weights='imagenet', include_top=False)
+
+# Adicione camadas personalizadas para classificação
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(1024, activation='relu')(x)
+x = Dense(1024, activation='relu')(x)
+x = Dense(512, activation='relu')(x)
+predictions = Dense(num_classes, activation='softmax')(x)
+
+# Crie o modelo final
+model = Model(inputs=base_model.input, outputs=predictions)
+
+# Congele as camadas do modelo base (MobileNetV2)
+for layer in base_model.layers:
+    layer.trainable = False
+
+# Compile o modelo
+model.compile(optimizer=Adam(learning_rate=0.001), loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Imprima a arquitetura do modelo
+print('ok!')
+
+
+
+# Especifique o caminho do diretório contendo suas imagens divididas em pastas de treino e validação
+train_data_dir = '/content/DATA/TREINAMENTO'
+val_data_dir = '/content/DATA/VALIDACAO'
+
+# Configure os geradores de dados para treino e validação
+train_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+val_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+
+train_generator = train_datagen.flow_from_directory(
+    train_data_dir,
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='categorical'
+)
+
+val_generator = val_datagen.flow_from_directory(
+    val_data_dir,
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='categorical'
+)
+
+# Treine o modelo
+model.fit(
+    train_generator,
+    epochs=12,
+    validation_data=val_generator
+)
+
+model.save('/content/MODELO/model.h5')
+
+
+# Caminho para o modelo treinado de classificação
+classification_model_path = "/content/MODELO/model.h5"  # Substitua pelo caminho correto do seu modelo treinado
+
+# Carregar o modelo de classificação
+classification_model = load_model(classification_model_path)
+
+# Função para carregar e exibir a imagem
+def load_and_display_image():
+    uploaded = files.upload()
+    image_path = list(uploaded.keys())[0]
+    image = Image.open(BytesIO(uploaded[image_path]))
+    display.display(image)
+    return image_path
+
+# Função para detectar e exibir faces na imagem
+def detect_and_display_faces(image_path):
+    # Carregar o modelo MTCNN
+    detector = MTCNN()
+
+    # Carregar a imagem
+    image = cv2.imread(image_path)
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # Detectar faces na imagem
+    faces = detector.detect_faces(image_rgb)
+
+    # Exibir a imagem com as faces detectadas
+    for face in faces:
+        x, y, w, h = face['box']
+
+        # Processar a região da face para a classificação
+        face_roi = image_rgb[y:y+h, x:x+w]
+        face_roi = cv2.resize(face_roi, (224, 224))
+        face_roi = np.expand_dims(face_roi, axis=0)
+        face_roi = preprocess_input(face_roi)
+
+        # Fazer a previsão usando o modelo de classificação
+        predictions = classification_model.predict(face_roi)
+        predicted_class = np.argmax(predictions, axis=1)[0]
+        class_names = ["Bruna", "Daniel", "Luiz Fernando", "Mamae", "Papai", "Regina", "Reginaldo", "Reinaldo"]
+        class_name = class_names[predicted_class]
+
+        # Adicionar o nome da classe acima da caixa delimitadora
+        label = f"{class_name}"
+        cv2.putText(image_rgb, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        cv2.rectangle(image_rgb, (x, y), (x+w, y+h), (255, 0, 0), 2)
+
+    plt.imshow(image_rgb)
+    plt.axis('off')
+    plt.show()
+
+    return image_rgb
+
+# Processar a imagem para a previsão
+image_path = load_and_display_image()
+
+# Detectar e exibir faces na imagem
+image_with_faces = detect_and_display_faces(image_path)
+
